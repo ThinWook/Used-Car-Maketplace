@@ -1,0 +1,58 @@
+{
+  "name": "free-nextjs-admin-dashboard",
+  "version": "2.0.2",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@fullcalendar/core": "*",
+    "@fullcalendar/daygrid": "*",
+    "@fullcalendar/interaction": "*",
+    "@fullcalendar/list": "*",
+    "@fullcalendar/react": "*",
+    "@fullcalendar/timegrid": "*",
+    "@react-jvectormap/core": "*",
+    "@react-jvectormap/world": "*",
+    "@tailwindcss/forms": "*",
+    "@tailwindcss/postcss": "*",
+    "apexcharts": "*",
+    "autoprefixer": "*",
+    "flatpickr": "*",
+    "next": "*",
+    "react": "*",
+    "react-apexcharts": "*",
+    "react-dnd": "*",
+    "react-dnd-html5-backend": "*",
+    "react-dom": "*",
+    "react-dropzone": "*",
+    "swiper": "*",
+    "tailwind-merge": "*"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "*",
+    "@svgr/webpack": "*",
+    "@types/node": "*",
+    "@types/react": "*",
+    "@types/react-dom": "*",
+    "@types/react-transition-group": "*",
+    "eslint": "*",
+    "eslint-config-next": "*",
+    "postcss": "*",
+    "tailwindcss": "*",
+    "typescript": "*"
+  },
+  "overrides": {
+    "@react-jvectormap/core": {
+      "react": "^16.8.0 || ^17 || ^18 || ^19",
+      "react-dom": "^16.8.0 || ^17 || ^18 || ^19"
+    },
+    "@react-jvectormap/world": {
+      "react": "^16.8.0 || ^17 || ^18 || ^19",
+      "react-dom": "^16.8.0 || ^17 || ^18 || ^19"
+    }
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "@used-car-marketplace/api",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Chợ xe cũ (ô tô, xe máy, xe đạp)",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "nodemon src/index.js",
+    "test": "jest",
+    "build": "npm run build"
+  },
+  "dependencies": {
+    "axios": "*",
+    "bcryptjs": "*",
+    "cloudinary": "*",
+    "cors": "*",
+    "dotenv": "*",
+    "express": "*",
+    "express-async-handler": "*",
+    "express-validator": "*",
+    "jsonwebtoken": "*",
+    "moment": "*",
+    "mongodb": "*",
+    "mongoose": "*",
+    "multer": "*",
+    "multer-storage-cloudinary": "*",
+    "socket.io": "*",
+    "stripe": "*",
+    "tailwind-merge": "*"
+  },
+  "devDependencies": {
+    "jest": "*",
+    "nodemon": "*"
+  }
+}
