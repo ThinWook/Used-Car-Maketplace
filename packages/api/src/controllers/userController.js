@@ -70,6 +70,11 @@ const userController = {
         return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng' });
       }
 
+      // Check if user is locked
+      if (user.is_locked) {
+        return res.status(401).json({ message: 'Tài khoản đã bị khóa, vui lòng liên hệ quản trị viên' });
+      }
+
       // Check password
       const isMatch = await user.matchPassword(password);
       if (!isMatch) {
@@ -100,14 +105,44 @@ const userController = {
     }
   },
 
-  // Get user profile
-  getUserProfile: async (req, res) => {
+  // Login admin
+  loginAdmin: async (req, res) => {
     try {
-      const user = await User.findById(req.user._id);
+      const { email, password } = req.body;
+
+      // Find the user by email
+      const user = await User.findOne({ email });
       if (!user) {
-        return res.status(404).json({ message: 'User not found' });
+        return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng' });
       }
 
+      // Check if user is admin
+      if (user.role !== 'admin') {
+        return res.status(401).json({ message: 'Bạn không có quyền truy cập trang quản trị' });
+      }
+
+      // Check if admin account is locked
+      if (user.is_locked) {
+        return res.status(401).json({ message: 'Tài khoản đã bị khóa, vui lòng liên hệ super admin' });
+      }
+
+      // Check password
+      const isMatch = await user.matchPassword(password);
+      if (!isMatch) {
+        return res.status(401).json({ message: 'Email hoặc mật khẩu không đúng' });
+      }
+
+      // Generate JWT token with short expiration for admin (8 hours)
+      const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+        expiresIn: '8h'
+      });
+
+      // Generate refresh token with longer expiration (30 days)
+      const refreshToken = jwt.sign({ id: user._id }, process.env.JWT_REFRESH_SECRET, {
+        expiresIn: '30d'
+      });
+
+      // Return user with admin info and tokens
       res.json({
         _id: user._id,
         full_name: user.full_name,
@@ -116,14 +151,83 @@ const userController = {
         address: user.address,
         role: user.role,
         avatar_url: user.avatar_url,
-        cover_image_url: user.cover_image_url,
-        rating: user.rating,
-        kyc_status: user.kyc_status,
-        created_at: user.created_at,
-        updated_at: user.updated_at
+        token,
+        refreshToken
       });
     } catch (error) {
-      res.status(500).json({ message: error.message });
+      res.status(400).json({ message: error.message });
+    }
+  },
+
+  // Refresh admin token
+  refreshAdminToken: async (req, res) => {
+    try {
+      const { refreshToken } = req.body;
+
+      if (!refreshToken) {
+        return res.status(400).json({ message: 'Refresh token is required' });
+      }
+
+      // Verify refresh token
+      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+      
+      // Find user
+      const user = await User.findById(decoded.id);
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
+      // Check if user is admin
+      if (user.role !== 'admin') {
+        return res.status(401).json({ message: 'Not authorized as admin' });
+      }
+
+      // Generate new JWT token
+      const newToken = jwt.sign({ id: user._id }, process.env.JWT_SECRET, {
+        expiresIn: '8h'
+      });
+
+      // Return new token
+      res.json({
+        token: newToken
+      });
+    } catch (error) {
+      res.status(401).json({ message: 'Invalid refresh token' });
+    }
+  },
+
+  // Get user profile (current user)
+  getUserProfile: async (req, res) => {
+    try {
+      // Lấy thông tin user nhưng không bao gồm password_hash
+      const user = await User.findById(req.user._id).select('-password_hash');
+      
+      if (!user) {
+        return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+      }
+      
+      // Đếm số lượng xe đã đăng và đã duyệt
+      const vehicleCount = await require('../models/Vehicle').countDocuments({ 
+        user: user._id,
+        status: 'approved'
+      });
+      
+      // Đếm số lượng xe yêu thích
+      const favoriteCount = await require('../models/Favorite').countDocuments({
+        user: user._id
+      });
+      
+      // Tạo đối tượng phản hồi từ thông tin người dùng
+      const userResponse = {
+        ...user.toObject(),
+        vehicle_count: vehicleCount,
+        favorite_count: favoriteCount
+      };
+      
+      res.json(userResponse);
+    } catch (error) {
+      console.error('Error in getUserProfile:', error);
+      res.status(500).json({ message: 'Lỗi server' });
     }
   },
 
@@ -357,50 +461,213 @@ const userController = {
     }
   },
 
-  // Add vehicle to favorites
-  addToFavorites: async (req, res) => {
+  // Get all users (admin only) with filtering and pagination
+  getUsers: async (req, res) => {
     try {
-      const user = await User.findById(req.user._id);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
+      // Lấy các tham số từ query string
+      const { 
+        search = '', 
+        role = '', 
+        is_locked, 
+        kyc_status = '',
+        page = 1, 
+        limit = 10,
+        exclude_admin = 'true'
+      } = req.query;
+
+      // Kiểm tra quyền admin
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: 'Không có quyền truy cập' });
       }
 
-      const vehicleId = req.params.vehicleId;
-
-      // Check if already in favorites
-      if (user.favorites.includes(vehicleId)) {
-        return res.status(400).json({ message: 'Vehicle already in favorites' });
+      // Xây dựng query filter
+      const filter = {};
+      
+      // Lọc theo vai trò nếu được chỉ định
+      if (role && role !== 'all') {
+        filter.role = role;
+      } else if (exclude_admin === 'true') {
+        // Nếu không chọn role cụ thể và exclude_admin là true, loại trừ vai trò admin
+        filter.role = { $ne: 'admin' };
       }
 
-      user.favorites.push(vehicleId);
-      await user.save();
+      // Lọc theo trạng thái KYC nếu được chỉ định
+      if (kyc_status && kyc_status !== 'all') {
+        filter.kyc_status = kyc_status;
+      }
 
-      res.json({ message: 'Vehicle added to favorites', favorites: user.favorites });
+      // Lọc theo trạng thái khóa tài khoản
+      if (is_locked !== undefined) {
+        // Chuyển đổi từ string sang boolean
+        filter.is_locked = is_locked === 'true';
+      }
+
+      // Tìm kiếm theo tên, email hoặc số điện thoại
+      if (search) {
+        filter.$or = [
+          { full_name: { $regex: search, $options: 'i' } },
+          { email: { $regex: search, $options: 'i' } },
+          { phone_number: { $regex: search, $options: 'i' } }
+        ];
+      }
+
+      // Chuyển đổi page và limit thành số
+      const pageNum = parseInt(page);
+      const limitNum = parseInt(limit);
+      
+      // Tính toán số bản ghi bỏ qua
+      const skip = (pageNum - 1) * limitNum;
+
+      // Đếm tổng số người dùng phù hợp với filter
+      const total = await User.countDocuments(filter);
+
+      // Lấy danh sách người dùng
+      const users = await User.find(filter)
+        .sort({ created_at: -1 }) // Sắp xếp mới nhất trước
+        .skip(skip)
+        .limit(limitNum)
+        .select('-password_hash'); // Loại bỏ trường password_hash
+
+      // Tính toán thông tin phân trang
+      const totalPages = Math.ceil(total / limitNum);
+      const hasMore = pageNum < totalPages;
+
+      res.json({
+        users,
+        pagination: {
+          total,
+          page: pageNum,
+          limit: limitNum,
+          totalPages,
+          hasMore
+        }
+      });
     } catch (error) {
-      res.status(400).json({ message: error.message });
+      console.error('Error in getUsers:', error);
+      res.status(500).json({ message: 'Lỗi server' });
     }
   },
 
-  // Remove vehicle from favorites
-  removeFromFavorites: async (req, res) => {
+  // Lock/unlock user (admin only)
+  toggleUserLock: async (req, res) => {
     try {
-      const user = await User.findById(req.user._id);
-      if (!user) {
-        return res.status(404).json({ message: 'User not found' });
+      const { userId, isLocked } = req.body;
+
+      // Kiểm tra quyền admin
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: 'Không có quyền truy cập' });
       }
 
-      const vehicleId = req.params.vehicleId;
-
-      // Filter out the vehicle ID from favorites
-      user.favorites = user.favorites.filter(
-        fav => fav.toString() !== vehicleId
-      );
+      // Tìm và cập nhật người dùng
+      const user = await User.findById(userId);
       
+      if (!user) {
+        return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+      }
+
+      // Ngăn chặn admin khóa tài khoản admin khác
+      if (user.role === 'admin' && req.user._id.toString() !== userId) {
+        return res.status(403).json({ message: 'Không thể khóa tài khoản admin khác' });
+      }
+
+      // Cập nhật trạng thái khóa
+      user.is_locked = isLocked;
       await user.save();
 
-      res.json({ message: 'Vehicle removed from favorites', favorites: user.favorites });
+      res.json({ 
+        message: isLocked ? 'Tài khoản đã bị khóa' : 'Tài khoản đã được mở khóa',
+        user: {
+          _id: user._id,
+          full_name: user.full_name,
+          email: user.email,
+          role: user.role,
+          is_locked: user.is_locked,
+          kyc_status: user.kyc_status
+        }
+      });
     } catch (error) {
-      res.status(400).json({ message: error.message });
+      console.error('Error in toggleUserLock:', error);
+      res.status(500).json({ message: 'Lỗi server' });
+    }
+  },
+
+  // Update KYC status (admin only)
+  updateKycStatus: async (req, res) => {
+    try {
+      const { userId, kycStatus } = req.body;
+
+      // Kiểm tra quyền admin
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: 'Không có quyền truy cập' });
+      }
+
+      // Kiểm tra trạng thái KYC hợp lệ
+      if (!['pending', 'verified', 'rejected'].includes(kycStatus)) {
+        return res.status(400).json({ message: 'Trạng thái KYC không hợp lệ' });
+      }
+
+      // Tìm và cập nhật người dùng
+      const user = await User.findById(userId);
+      
+      if (!user) {
+        return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+      }
+
+      // Cập nhật trạng thái KYC
+      user.kyc_status = kycStatus;
+      await user.save();
+
+      res.json({ 
+        message: `Trạng thái KYC đã được cập nhật thành ${kycStatus}`,
+        user: {
+          _id: user._id,
+          full_name: user.full_name,
+          email: user.email,
+          role: user.role,
+          kyc_status: user.kyc_status
+        }
+      });
+    } catch (error) {
+      console.error('Error in updateKycStatus:', error);
+      res.status(500).json({ message: 'Lỗi server' });
+    }
+  },
+
+  // Lấy chi tiết người dùng theo ID (admin only)
+  getUserById: async (req, res) => {
+    try {
+      const userId = req.params.id;
+
+      // Kiểm tra quyền admin
+      if (req.user.role !== 'admin') {
+        return res.status(403).json({ message: 'Không có quyền truy cập' });
+      }
+
+      // Tìm người dùng
+      const user = await User.findById(userId).select('-password_hash');
+      
+      if (!user) {
+        return res.status(404).json({ message: 'Không tìm thấy người dùng' });
+      }
+
+      // Định dạng lại URL cho avatar và cover image nếu cần
+      // Đảm bảo đường dẫn đầy đủ cho các hình ảnh
+      if (user.avatar_url && !user.avatar_url.startsWith('http')) {
+        const apiBaseUrl = process.env.API_URL || 'http://localhost:5000';
+        user.avatar_url = `${apiBaseUrl}${user.avatar_url.startsWith('/') ? '' : '/'}${user.avatar_url}`;
+      }
+      
+      if (user.cover_image_url && !user.cover_image_url.startsWith('http')) {
+        const apiBaseUrl = process.env.API_URL || 'http://localhost:5000';
+        user.cover_image_url = `${apiBaseUrl}${user.cover_image_url.startsWith('/') ? '' : '/'}${user.cover_image_url}`;
+      }
+
+      res.json({ 
+        user
+      });
+    } catch (error) {
+      console.error('Error in getUserById:', error);
+      res.status(500).json({ message: 'Lỗi server' });
     }
   }
 };

@@ -17,6 +17,8 @@ const reviewRoutes = require('./routes/reviewRoutes');
 const paymentRoutes = require('./routes/paymentRoutes');
 const statisticsRoutes = require('./routes/statisticsRoutes');
 const externalVehicleRoutes = require('./routes/externalVehicleRoutes');
+const notificationRoutes = require('./routes/notificationRoutes');
+const favoriteRoutes = require('./routes/favoriteRoutes');
 
 // Import controller trực tiếp
 const userController = require('./controllers/userController');
@@ -41,7 +43,7 @@ app.use(cors({
     ? [process.env.FRONTEND_URL, process.env.ADMIN_URL] 
     : ['http://localhost:3000', 'http://localhost:3001'],
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }));
 
@@ -67,6 +69,8 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/statistics', statisticsRoutes);
 app.use('/api/external-vehicles', externalVehicleRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/favorites', favoriteRoutes);
 
 // Map auth routes
 app.post('/api/auth/login', userController.loginUser);

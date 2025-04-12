@@ -1,9 +1,40 @@
 const Chat = require('../models/Chat');
 const User = require('../models/User');
+const Vehicle = require('../models/Vehicle');
+const mongoose = require('mongoose');
 
 class ChatService {
   async createChat(participants, vehicleId) {
     try {
+      // Kiểm tra participants
+      if (!Array.isArray(participants) || participants.length !== 2) {
+        throw new Error('Participants phải là một mảng chứa đúng 2 ID người dùng');
+      }
+
+      // Kiểm tra tính hợp lệ của ID
+      participants.forEach(id => {
+        if (!mongoose.Types.ObjectId.isValid(id)) {
+          throw new Error(`ID người dùng không hợp lệ: ${id}`);
+        }
+      });
+
+      if (!mongoose.Types.ObjectId.isValid(vehicleId)) {
+        throw new Error(`ID phương tiện không hợp lệ: ${vehicleId}`);
+      }
+
+      // Kiểm tra xem người dùng có tồn tại không
+      const users = await User.find({ _id: { $in: participants } });
+      if (users.length !== 2) {
+        throw new Error('Một hoặc cả hai người dùng không tồn tại');
+      }
+
+      // Kiểm tra xem phương tiện có tồn tại không
+      const vehicle = await Vehicle.findById(vehicleId);
+      if (!vehicle) {
+        throw new Error(`Không tìm thấy phương tiện với ID: ${vehicleId}`);
+      }
+
+      // Tìm cuộc trò chuyện hiện có
       const existingChat = await Chat.findOne({
         participants: { $all: participants },
         vehicle: vehicleId
@@ -13,6 +44,7 @@ class ChatService {
         return existingChat;
       }
 
+      // Tạo cuộc trò chuyện mới
       const chat = new Chat({
         participants,
         vehicle: vehicleId
@@ -20,6 +52,7 @@ class ChatService {
 
       return await chat.save();
     } catch (error) {
+      console.error('Error in createChat service:', error);
       throw error;
     }
   }

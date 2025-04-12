@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { Dialog, Transition } from "@headlessui/react";
-import { SearchIcon, MagnifyingGlassIcon } from "@/icons";
+import { MagnifyingGlassIcon } from "@/icons";
 import VehicleFilter from "./VehicleFilter";
 import VehicleRow from "./VehicleRow";
 import VehicleDetailDialog from "./VehicleDetailDialog";
 import { Fragment } from "react";
+import { vehicleApi } from "@/lib/api";
 
 // Mô hình dữ liệu cho xe
 export interface Vehicle {
@@ -51,160 +52,75 @@ export default function AdminVehicleList() {
   // State cho phân trang
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(10);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   
   // State cho xe đang xem chi tiết
   const [selectedVehicle, setSelectedVehicle] = useState<Vehicle | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  
+  // State cho trạng thái loading
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Hàm lấy dữ liệu xe (mock data)
-  useEffect(() => {
-    // Giả lập API call
-    const fetchVehicles = async () => {
-      // Trong dự án thực tế, sẽ gọi API tại đây
-      const mockVehicles: Vehicle[] = [
-        {
-          id: "1",
-          title: "Mercedes C300 AMG 2023",
-          price: 1650000000,
-          seller: {
-            id: "user1",
-            fullName: "Nguyễn Văn A",
-            avatar: "/images/avatars/user1.jpg",
-          },
-          year: 2023,
-          body_type: "Sedan",
-          type: "car",
-          status: "approved",
-          thumbnail: "/images/vehicles/mercedes-c300.jpg",
-          licensePlate: "51F-123.45",
-          make: "Mercedes-Benz",
-          model: "C300 AMG",
-          color: "Trắng",
-          fuel_type: "Xăng",
-          mileage: 1500,
-          description: "Xe mới đi được 1500km, còn bảo hành chính hãng.",
-          images: [
-            "/images/vehicles/mercedes-c300-1.jpg",
-            "/images/vehicles/mercedes-c300-2.jpg",
-          ],
-          created_at: "2023-12-15T08:00:00Z",
-          updated_at: "2023-12-15T09:30:00Z",
-        },
-        {
-          id: "2",
-          title: "Honda SH 150i 2022",
-          price: 120000000,
-          seller: {
-            id: "user2",
-            fullName: "Trần Thị B",
-            avatar: "/images/avatars/user2.jpg",
-          },
-          year: 2022,
-          body_type: "Scooter",
-          type: "motorcycle",
-          status: "pending",
-          thumbnail: "/images/vehicles/honda-sh.jpg",
-          licensePlate: "59P2-12345",
-          make: "Honda",
-          model: "SH 150i",
-          color: "Đen",
-          mileage: 8500,
-          description: "Xe chính chủ, đi giữ gìn, bảo dưỡng đầy đủ.",
-          images: [
-            "/images/vehicles/honda-sh-1.jpg",
-            "/images/vehicles/honda-sh-2.jpg",
-          ],
-          created_at: "2023-12-10T10:00:00Z",
-          updated_at: "2023-12-10T10:30:00Z",
-        },
-        {
-          id: "3",
-          title: "Giant ATX 2022",
-          price: 8500000,
-          seller: {
-            id: "user3",
-            fullName: "Lê Văn C",
-            avatar: "/images/avatars/user3.jpg",
-          },
-          year: 2022,
-          body_type: "Mountain Bike",
-          type: "bicycle",
-          status: "sold",
-          thumbnail: "/images/vehicles/giant-atx.jpg",
-          make: "Giant",
-          model: "ATX",
-          color: "Xanh dương",
-          description: "Xe đạp địa hình nhập khẩu, mới 95%.",
-          images: [
-            "/images/vehicles/giant-atx-1.jpg",
-            "/images/vehicles/giant-atx-2.jpg",
-          ],
-          created_at: "2023-11-20T14:00:00Z",
-          updated_at: "2023-12-05T09:00:00Z",
-        },
-        {
-          id: "4",
-          title: "Toyota Camry 2.5Q 2020",
-          price: 950000000,
-          seller: {
-            id: "user1",
-            fullName: "Nguyễn Văn A",
-            avatar: "/images/avatars/user1.jpg",
-          },
-          year: 2020,
-          body_type: "Sedan",
-          type: "car",
-          status: "rejected",
-          thumbnail: "/images/vehicles/toyota-camry.jpg",
-          licensePlate: "51G-123.45",
-          make: "Toyota",
-          model: "Camry 2.5Q",
-          color: "Đen",
-          fuel_type: "Xăng",
-          mileage: 25000,
-          description: "Xe gia đình sử dụng, bảo dưỡng định kỳ tại hãng.",
-          images: [
-            "/images/vehicles/toyota-camry-1.jpg",
-            "/images/vehicles/toyota-camry-2.jpg",
-          ],
-          created_at: "2023-12-01T08:00:00Z",
-          updated_at: "2023-12-02T10:30:00Z",
-        },
-        {
-          id: "5",
-          title: "Yamaha Exciter 155 VVA 2022",
-          price: 52000000,
-          seller: {
-            id: "user2",
-            fullName: "Trần Thị B",
-            avatar: "/images/avatars/user2.jpg",
-          },
-          year: 2022,
-          body_type: "Sport Underbone",
-          type: "motorcycle",
-          status: "hidden",
-          thumbnail: "/images/vehicles/yamaha-exciter.jpg",
-          licensePlate: "59P3-54321",
-          make: "Yamaha",
-          model: "Exciter 155 VVA",
-          color: "Xanh GP",
-          mileage: 12000,
-          description: "Xe chạy lướt, còn mới đẹp, máy zin chưa đụng.",
-          images: [
-            "/images/vehicles/yamaha-exciter-1.jpg",
-            "/images/vehicles/yamaha-exciter-2.jpg",
-          ],
-          created_at: "2023-11-15T15:00:00Z",
-          updated_at: "2023-11-16T09:30:00Z",
-        },
-      ];
-      
-      setVehicles(mockVehicles);
-      setFilteredVehicles(mockVehicles);
-    };
+  // Hàm lấy dữ liệu xe từ API
+  const fetchVehicles = async () => {
+    setIsLoading(true);
+    setError(null);
     
+    try {
+      const response = await vehicleApi.getVehicles({
+        search: searchTerm,
+        type: filters.type !== "all" ? filters.type : undefined,
+        status: filters.status !== "all" ? filters.status : undefined,
+        seller: filters.seller !== "all" ? filters.seller : undefined,
+        page: currentPage,
+        limit: itemsPerPage
+      });
+      
+      // Biến đổi dữ liệu từ API để phù hợp với kiểu dữ liệu Vehicle
+      const transformedVehicles = response.vehicles.map((v: any) => ({
+        id: v._id,
+        title: v.title,
+        price: v.price,
+        seller: {
+          id: v.user?._id || "",
+          fullName: v.user?.full_name || "Không xác định",
+          avatar: v.user?.avatar_url
+        },
+        year: v.year,
+        body_type: v.body_type || "",
+        type: v.type,
+        status: v.status,
+        thumbnail: v.images?.[0] || "",
+        licensePlate: v.license_plate || "",
+        make: v.make,
+        model: v.model,
+        color: v.color || "",
+        fuel_type: v.fuel_type,
+        mileage: v.mileage,
+        description: v.description,
+        images: v.images || [],
+        created_at: v.created_at,
+        updated_at: v.updated_at
+      }));
+      
+      setVehicles(transformedVehicles);
+      setFilteredVehicles(transformedVehicles);
+      setTotalItems(response.pagination.total);
+      setTotalPages(response.pagination.pages);
+    } catch (err) {
+      console.error("Failed to fetch vehicles:", err);
+      setError("Không thể tải danh sách xe. Vui lòng thử lại sau.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+  
+  // Gọi API khi component mount hoặc khi các filter thay đổi
+  useEffect(() => {
     fetchVehicles();
-  }, []);
+  }, [currentPage, searchTerm, filters]);
 
   // Xử lý lọc và tìm kiếm
   useEffect(() => {
@@ -239,61 +155,88 @@ export default function AdminVehicleList() {
     setCurrentPage(1); // Reset về trang đầu tiên khi lọc
   }, [searchTerm, filters, vehicles]);
 
-  // Hàm xử lý các hành động
-  const handleAction = (vehicleId: string, action: string) => {
-    // Trong dự án thực tế, sẽ gọi API tại đây
-    switch (action) {
-      case "approve":
-        setVehicles((prev) =>
-          prev.map((vehicle) =>
-            vehicle.id === vehicleId
-              ? { ...vehicle, status: "approved" }
-              : vehicle
-          )
-        );
-        break;
-      case "reject":
-        setVehicles((prev) =>
-          prev.map((vehicle) =>
-            vehicle.id === vehicleId
-              ? { ...vehicle, status: "rejected" }
-              : vehicle
-          )
-        );
-        break;
-      case "hide":
-        setVehicles((prev) =>
-          prev.map((vehicle) =>
-            vehicle.id === vehicleId
-              ? { ...vehicle, status: "hidden" }
-              : vehicle
-          )
-        );
-        break;
-      case "delete":
-        if (window.confirm("Bạn có chắc chắn muốn xóa tin đăng này?")) {
-          setVehicles((prev) => prev.filter((vehicle) => vehicle.id !== vehicleId));
-        }
-        break;
-      default:
-        break;
+  // Xử lý các action (approve, reject, hide, delete)
+  const handleAction = async (vehicleId: string, action: string) => {
+    try {
+      let newStatus: 'pending' | 'approved' | 'rejected' | 'sold' | 'hidden';
+      
+      switch (action) {
+        case 'approve':
+          newStatus = 'approved';
+          break;
+        case 'reject':
+          newStatus = 'rejected';
+          break;
+        case 'hide':
+          newStatus = 'hidden';
+          break;
+        case 'delete':
+          await vehicleApi.deleteVehicle(vehicleId);
+          // Refresh danh sách sau khi xóa
+          fetchVehicles();
+          return;
+        default:
+          return;
+      }
+      
+      // Cập nhật trạng thái xe
+      await vehicleApi.updateVehicleStatus(vehicleId, newStatus);
+      
+      // Cập nhật lại danh sách xe
+      fetchVehicles();
+    } catch (error) {
+      console.error(`Lỗi khi thực hiện ${action}:`, error);
+      setError(`Không thể thực hiện thao tác. Vui lòng thử lại sau.`);
     }
   };
 
-  // Hàm xử lý xem chi tiết
-  const handleViewDetails = (vehicle: Vehicle) => {
-    setSelectedVehicle(vehicle);
-    setIsDetailOpen(true);
+  // Xem chi tiết xe
+  const handleViewDetails = async (vehicleId: string) => {
+    try {
+      setIsLoading(true);
+      const vehicleDetails = await vehicleApi.getVehicleDetails(vehicleId);
+      
+      // Chuyển đổi dữ liệu
+      const vehicle: Vehicle = {
+        id: vehicleDetails._id,
+        title: vehicleDetails.title,
+        price: vehicleDetails.price,
+        seller: {
+          id: vehicleDetails.user?._id || "",
+          fullName: vehicleDetails.user?.full_name || "Không xác định",
+          avatar: vehicleDetails.user?.avatar_url
+        },
+        year: vehicleDetails.year,
+        body_type: vehicleDetails.body_type || "",
+        type: vehicleDetails.type,
+        status: vehicleDetails.status,
+        thumbnail: vehicleDetails.images?.[0] || "",
+        licensePlate: vehicleDetails.license_plate || "",
+        make: vehicleDetails.make,
+        model: vehicleDetails.model,
+        color: vehicleDetails.color || "",
+        fuel_type: vehicleDetails.fuel_type,
+        mileage: vehicleDetails.mileage,
+        description: vehicleDetails.description,
+        images: vehicleDetails.images || [],
+        created_at: vehicleDetails.created_at,
+        updated_at: vehicleDetails.updated_at
+      };
+      
+      setSelectedVehicle(vehicle);
+      setIsDetailOpen(true);
+    } catch (error) {
+      console.error("Lỗi khi lấy chi tiết xe:", error);
+      setError("Không thể tải chi tiết xe. Vui lòng thử lại sau.");
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Phân trang
-  const indexOfLastItem = currentPage * itemsPerPage;
-  const indexOfFirstItem = indexOfLastItem - itemsPerPage;
-  const currentItems = filteredVehicles.slice(indexOfFirstItem, indexOfLastItem);
-  const totalPages = Math.ceil(filteredVehicles.length / itemsPerPage);
-
-  // Hàm chuyển trang
-  const paginate = (pageNumber: number) => setCurrentPage(pageNumber);
+  const paginate = (pageNumber: number) => {
+    setCurrentPage(pageNumber);
+  };
 
   return (
     <div className="w-full">
@@ -360,8 +303,8 @@ export default function AdminVehicleList() {
             </tr>
           </thead>
           <tbody>
-            {currentItems.length > 0 ? (
-              currentItems.map((vehicle) => (
+            {filteredVehicles.length > 0 ? (
+              filteredVehicles.map((vehicle) => (
                 <VehicleRow
                   key={vehicle.id}
                   vehicle={vehicle}
@@ -384,11 +327,11 @@ export default function AdminVehicleList() {
       {filteredVehicles.length > 0 && (
         <div className="flex justify-between items-center mt-4">
           <div className="text-sm text-gray-700 dark:text-gray-400">
-            Hiển thị <span className="font-medium">{indexOfFirstItem + 1}</span> đến{" "}
+            Hiển thị <span className="font-medium">{currentPage * itemsPerPage - itemsPerPage + 1}</span> đến{" "}
             <span className="font-medium">
-              {Math.min(indexOfLastItem, filteredVehicles.length)}
+              {Math.min(currentPage * itemsPerPage, totalItems)}
             </span>{" "}
-            trong <span className="font-medium">{filteredVehicles.length}</span> kết quả
+            trong <span className="font-medium">{totalItems}</span> kết quả
           </div>
           <nav className="inline-flex rounded-md shadow-sm -space-x-px">
             <button
@@ -441,4 +384,3 @@ export default function AdminVehicleList() {
     </div>
   );
 } 
- 

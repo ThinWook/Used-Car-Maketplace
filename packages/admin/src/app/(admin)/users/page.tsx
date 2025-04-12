@@ -1,15 +1,20 @@
-import { AdminUserList } from "@/components/users/AdminUserList";
+"use client";
+
+import AdminUserList from "@/components/users/AdminUserList";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { PageContainer } from "@/components/PageContainer";
 
 export default function UsersPage() {
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-          Quản lý người dùng
-        </h1>
-      </div>
-      
-      <AdminUserList />
-    </div>
+    <PageContainer>
+      <Card>
+        <CardHeader className="border-b border-gray-200 dark:border-gray-700">
+          <CardTitle>Quản lý người dùng</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <AdminUserList />
+        </CardContent>
+      </Card>
+    </PageContainer>
   );
 } 

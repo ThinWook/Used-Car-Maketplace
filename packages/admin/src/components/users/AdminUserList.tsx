@@ -1,281 +1,446 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import Input from "@/components/form/input/InputField";
-import Select from "@/components/form/Select";
-import { Button } from "@/components/ui/button/Button";
-import { UserRow } from "./UserRow";
-import { MagnifyingGlassIcon } from "@/icons";
+import { useState, useEffect, useCallback } from 'react';
+import { useDebounce } from '@/hooks/useDebounce';
+import { MoreHorizontal, Search, Filter, User as UserIcon, Lock, Unlock, CheckCircle, XCircle, Eye } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
+import { userApi } from '@/lib/api';
+import toast from 'react-hot-toast';
+import { useRouter } from 'next/navigation';
+import { getImageUrl } from "@/lib/utils";
 
 interface User {
-  id: string;
-  avatar: string;
-  fullName: string;
+  _id: string;
+  full_name: string;
   email: string;
-  phone: string;
-  kycStatus: 'pending' | 'verified' | 'rejected';
-  accountStatus: 'active' | 'locked';
+  phone_number: string;
+  role: 'admin' | 'user' | 'moderator';
+  is_locked: boolean;
+  kyc_status: 'verified' | 'pending' | 'rejected';
+  avatar_url?: string;
+  created_at: string;
 }
 
 interface FilterParams {
-  search?: string;
-  role?: string;
-  kycStatus?: string;
-  page?: number;
-  limit?: number;
+  search: string;
+  role: string;
+  is_locked: string;
+  kyc_status: string;
+  page: number;
+  limit: number;
 }
 
-const roleOptions = [
-  { value: '', label: 'Tất cả vai trò' },
-  { value: 'user', label: 'Người dùng' },
-  { value: 'seller', label: 'Người bán' },
-  { value: 'admin', label: 'Quản trị viên' },
-];
+interface PaginationData {
+  total: number;
+  page: number;
+  limit: number;
+  totalPages: number;
+  hasMore: boolean;
+}
 
-const kycStatusOptions = [
-  { value: '', label: 'Tất cả KYC' },
-  { value: 'pending', label: 'Đang chờ' },
-  { value: 'verified', label: 'Đã xác thực' },
-  { value: 'rejected', label: 'Từ chối' },
-];
-
-export const AdminUserList = () => {
+const AdminUserList = () => {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState<FilterParams>({
+  const [error, setError] = useState<string | null>(null);
+  const [pagination, setPagination] = useState<PaginationData>({
+    total: 0,
     page: 1,
     limit: 10,
+    totalPages: 0,
+    hasMore: false
   });
-  const [hasMore, setHasMore] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  const fetchUsers = async () => {
+  
+  const [filters, setFilters] = useState<FilterParams>({
+    search: '',
+    role: 'all',
+    is_locked: 'all',
+    kyc_status: 'all',
+    page: 1,
+    limit: 10
+  });
+  
+  // Tạo giá trị search được debounce
+  const debouncedSearch = useDebounce(filters.search, 500);
+  
+  const router = useRouter();
+  
+  // Lấy danh sách người dùng từ API
+  const fetchUsers = useCallback(async (params: FilterParams, isNewSearch = false) => {
     try {
       setLoading(true);
-      setError(null);
       
-      const queryParams = new URLSearchParams();
-      Object.entries(filters).forEach(([key, value]) => {
-        if (value) queryParams.append(key, value.toString());
-      });
-
-      const response = await fetch(`/api/admin/users?${queryParams.toString()}`);
+      // Tạo đối tượng chứa các tham số API thực tế
+      const apiParams: any = {
+        search: params.search,
+        page: params.page,
+        limit: params.limit,
+        exclude_admin: params.role !== 'admin' // Ẩn admin nếu không filter theo admin
+      };
       
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      // Xử lý tham số role
+      if (params.role !== 'all') {
+        apiParams.role = params.role;
       }
       
-      const contentType = response.headers.get("content-type");
-      if (!contentType || !contentType.includes("application/json")) {
-        throw new Error("Response is not JSON");
+      // Xử lý tham số is_locked (chuyển đổi từ string sang boolean)
+      if (params.is_locked !== 'all') {
+        apiParams.is_locked = params.is_locked === 'locked';
       }
       
-      const data = await response.json();
+      // Xử lý tham số kyc_status
+      if (params.kyc_status !== 'all') {
+        apiParams.kyc_status = params.kyc_status;
+      }
       
-      if (filters.page === 1) {
-        setUsers(data.users || []);
+      const result = await userApi.getUsers(apiParams);
+      
+      // Nếu là tìm kiếm mới, thay thế danh sách hiện tại
+      // Ngược lại, thêm vào cuối danh sách
+      if (isNewSearch) {
+        setUsers(result.users);
       } else {
-        setUsers(prev => [...prev, ...(data.users || [])]);
+        setUsers(prev => [...prev, ...result.users]);
       }
       
-      setHasMore(data.hasMore || false);
-    } catch (error) {
-      console.error('Error fetching users:', error);
+      // Cập nhật thông tin phân trang
+      setPagination(result.pagination);
+      
+    } catch (err) {
       setError('Không thể tải danh sách người dùng. Vui lòng thử lại sau.');
-      setUsers([]);
-      setHasMore(false);
+      console.error(err);
     } finally {
       setLoading(false);
     }
-  };
-
+  }, []);
+  
+  // Xử lý khi filters thay đổi
   useEffect(() => {
-    fetchUsers();
-  }, [filters]);
-
-  const handleSearch = (value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      search: value,
-      page: 1,
-    }));
+    setFilters(prev => ({ ...prev, page: 1 }));
+    fetchUsers({ ...filters, page: 1 }, true);
+  }, [debouncedSearch, filters.role, filters.is_locked, filters.kyc_status, fetchUsers]);
+  
+  // Xử lý khi nhập từ khoá tìm kiếm
+  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFilters(prev => ({ ...prev, search: e.target.value }));
   };
-
-  const handleFilterChange = (key: keyof FilterParams, value: string) => {
-    setFilters(prev => ({
-      ...prev,
-      [key]: value,
-      page: 1,
-    }));
+  
+  // Xử lý khi thay đổi lọc
+  const handleFilterChange = (type: keyof FilterParams, value: string) => {
+    setFilters(prev => ({ ...prev, [type]: value }));
   };
-
-  const handleLoadMore = () => {
-    setFilters(prev => ({
-      ...prev,
-      page: (prev.page || 1) + 1,
-    }));
+  
+  // Tải thêm người dùng
+  const loadMore = () => {
+    if (!loading && pagination.hasMore) {
+      const newPage = filters.page + 1;
+      setFilters(prev => ({ ...prev, page: newPage }));
+      fetchUsers({ ...filters, page: newPage });
+    }
   };
-
-  const handleApproveKyc = async (userId: string) => {
+  
+  // Xử lý duyệt/từ chối KYC
+  const handleKycAction = async (userId: string, approve: boolean) => {
     try {
-      await fetch(`/api/admin/users/${userId}/kyc`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: 'verified' }),
-      });
-      fetchUsers();
+      const newStatus = approve ? 'verified' : 'rejected';
+      await userApi.updateKycStatus(userId, newStatus);
+      
+      // Cập nhật state sau khi API thành công
+      setUsers(prevUsers => 
+        prevUsers.map(user => 
+          user._id === userId 
+            ? { ...user, kyc_status: newStatus } 
+            : user
+        )
+      );
+      
+      toast.success(`Đã ${approve ? 'duyệt' : 'từ chối'} KYC cho người dùng`);
     } catch (error) {
-      console.error('Error approving KYC:', error);
+      console.error('Error updating KYC status:', error);
+      toast.error('Không thể cập nhật trạng thái KYC');
+    }
+  };
+  
+  // Xử lý khoá/mở khoá người dùng
+  const handleLockAction = async (userId: string, lock: boolean) => {
+    try {
+      await userApi.toggleUserLock(userId, lock);
+      
+      // Cập nhật state sau khi API thành công
+      setUsers(prevUsers => 
+        prevUsers.map(user => 
+          user._id === userId 
+            ? { ...user, is_locked: lock } 
+            : user
+        )
+      );
+      
+      toast.success(`Đã ${lock ? 'khóa' : 'mở khóa'} tài khoản người dùng`);
+    } catch (error) {
+      console.error('Error toggling user lock status:', error);
+      toast.error('Không thể thay đổi trạng thái khóa của tài khoản');
+    }
+  };
+  
+  // Xem chi tiết người dùng
+  const handleViewUser = (userId: string) => {
+    // Chuyển hướng đến trang chi tiết người dùng
+    router.push(`/users/${userId}`);
+  };
+  
+  // Hiển thị skeleton khi đang tải
+  const renderSkeleton = () => (
+    Array(5).fill(null).map((_, index) => (
+      <TableRow key={`skeleton-${index}`}>
+        <TableCell><Skeleton className="h-4 w-4 rounded-full" /></TableCell>
+        <TableCell>
+          <div className="flex items-center gap-3">
+            <Skeleton className="h-10 w-10 rounded-full" />
+            <div className="space-y-1">
+              <Skeleton className="h-4 w-[140px]" />
+              <Skeleton className="h-4 w-[100px]" />
+            </div>
+          </div>
+        </TableCell>
+        <TableCell><Skeleton className="h-4 w-[120px]" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-[100px]" /></TableCell>
+        <TableCell><Skeleton className="h-6 w-[80px]" /></TableCell>
+        <TableCell><Skeleton className="h-6 w-[80px]" /></TableCell>
+        <TableCell><Skeleton className="h-4 w-[80px]" /></TableCell>
+        <TableCell><Skeleton className="h-8 w-8" /></TableCell>
+      </TableRow>
+    ))
+  );
+
+  // Hiển thị trạng thái KYC
+  const renderKycStatus = (status: User['kyc_status']) => {
+    switch (status) {
+      case 'verified':
+        return <Badge className="bg-green-100 text-green-800">Đã xác thực</Badge>;
+      case 'pending':
+        return <Badge className="bg-yellow-100 text-yellow-800">Chờ duyệt</Badge>;
+      case 'rejected':
+        return <Badge className="bg-red-100 text-red-800">Đã từ chối</Badge>;
+      default:
+        return null;
     }
   };
 
-  const handleRejectKyc = async (userId: string) => {
-    try {
-      await fetch(`/api/admin/users/${userId}/kyc`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: 'rejected' }),
-      });
-      fetchUsers();
-    } catch (error) {
-      console.error('Error rejecting KYC:', error);
-    }
-  };
-
-  const handleLock = async (userId: string) => {
-    try {
-      await fetch(`/api/admin/users/${userId}/lock`, {
-        method: 'PATCH',
-      });
-      fetchUsers();
-    } catch (error) {
-      console.error('Error locking user:', error);
-    }
-  };
-
-  const handleUnlock = async (userId: string) => {
-    try {
-      await fetch(`/api/admin/users/${userId}/unlock`, {
-        method: 'PATCH',
-      });
-      fetchUsers();
-    } catch (error) {
-      console.error('Error unlocking user:', error);
-    }
+  // Hiển thị trạng thái tài khoản
+  const renderUserStatus = (is_locked: boolean) => {
+    return is_locked 
+      ? <Badge className="bg-gray-100 text-gray-800">Đã khóa</Badge>
+      : <Badge className="bg-green-100 text-green-800">Đang hoạt động</Badge>;
   };
 
   return (
-    <div className="p-6">
-      <div className="mb-6">
-        <div className="flex flex-col md:flex-row gap-4">
-          <div className="flex-1">
-            <div className="relative">
-              <Input
-                type="text"
-                placeholder="Tìm kiếm theo tên, email, số điện thoại..."
-                value={filters.search || ''}
-                onChange={(e) => handleSearch(e.target.value)}
-                className="pl-10 pr-4"
-              />
-              <div className="absolute left-3 top-1/2 -translate-y-1/2">
-                <MagnifyingGlassIcon className="w-5 h-5 text-gray-400" />
-              </div>
-            </div>
-          </div>
-          <div className="flex gap-4">
-            <Select
-              options={roleOptions}
-              value={filters.role || ''}
-              onChange={(value) => handleFilterChange('role', value)}
-              className="w-40"
-            />
-            <Select
-              options={kycStatusOptions}
-              value={filters.kycStatus || ''}
-              onChange={(value) => handleFilterChange('kycStatus', value)}
-              className="w-40"
-            />
-          </div>
+    <Card className="p-6">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-2xl font-semibold">Quản lý người dùng</h2>
+        <Button>
+          <UserIcon className="mr-2 h-4 w-4" />
+          Thêm người dùng
+        </Button>
+      </div>
+      
+      <div className="flex flex-col md:flex-row gap-4 mb-6">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
+          <Input
+            placeholder="Tìm kiếm theo tên, email, số điện thoại..."
+            className="pl-10"
+            value={filters.search}
+            onChange={handleSearchChange}
+          />
+        </div>
+        
+        <div className="flex gap-2">
+          <Select value={filters.role} onValueChange={(value) => handleFilterChange('role', value)}>
+            <SelectTrigger className="w-[160px]">
+              <Filter className="mr-2 h-4 w-4" />
+              <SelectValue placeholder="Vai trò" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tất cả vai trò</SelectItem>
+              <SelectItem value="user">Người dùng</SelectItem>
+              <SelectItem value="moderator">Kiểm duyệt viên</SelectItem>
+              <SelectItem value="admin">Quản trị viên</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          <Select value={filters.is_locked} onValueChange={(value) => handleFilterChange('is_locked', value)}>
+            <SelectTrigger className="w-[160px]">
+              <Filter className="mr-2 h-4 w-4" />
+              <SelectValue placeholder="Trạng thái" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tất cả trạng thái</SelectItem>
+              <SelectItem value="active">Đang hoạt động</SelectItem>
+              <SelectItem value="locked">Đã khóa</SelectItem>
+            </SelectContent>
+          </Select>
+          
+          <Select value={filters.kyc_status} onValueChange={(value) => handleFilterChange('kyc_status', value)}>
+            <SelectTrigger className="w-[160px]">
+              <Filter className="mr-2 h-4 w-4" />
+              <SelectValue placeholder="Trạng thái KYC" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tất cả KYC</SelectItem>
+              <SelectItem value="verified">Đã xác thực</SelectItem>
+              <SelectItem value="pending">Chờ duyệt</SelectItem>
+              <SelectItem value="rejected">Đã từ chối</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
       </div>
-
+      
+      {error && (
+        <div className="bg-red-50 p-4 rounded-md mb-4 text-red-800">{error}</div>
+      )}
+      
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-          <thead className="bg-gray-50 dark:bg-gray-800">
-            <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Người dùng
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Email
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Số điện thoại
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Trạng thái KYC
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Trạng thái tài khoản
-              </th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Hành động
-              </th>
-            </tr>
-          </thead>
-          <tbody className="bg-white dark:bg-gray-900 divide-y divide-gray-200 dark:divide-gray-700">
-            {loading ? (
-              <tr>
-                <td colSpan={6} className="px-6 py-4 text-center">
-                  <div className="animate-pulse flex space-x-4">
-                    <div className="flex-1 space-y-4 py-1">
-                      <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-3/4"></div>
-                      <div className="space-y-2">
-                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded"></div>
-                        <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded w-5/6"></div>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="w-[40px]">#</TableHead>
+              <TableHead>Người dùng</TableHead>
+              <TableHead>Email</TableHead>
+              <TableHead>Vai trò</TableHead>
+              <TableHead>Trạng thái</TableHead>
+              <TableHead>KYC</TableHead>
+              <TableHead>Ngày tạo</TableHead>
+              <TableHead aria-label="Actions" className="w-[60px]"></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {loading && users.length === 0 ? renderSkeleton() : (
+              users.map((user, index) => (
+                <TableRow key={user._id}>
+                  <TableCell className="font-medium">{(pagination.page - 1) * pagination.limit + index + 1}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-full bg-slate-200 flex items-center justify-center">
+                        {user.avatar_url ? (
+                          <img 
+                            src={getImageUrl(user.avatar_url, 'avatar')} 
+                            alt={user.full_name} 
+                            className="w-10 h-10 rounded-full object-cover"
+                            onError={(e) => {
+                              // Khi ảnh lỗi, ẩn ảnh và hiển thị icon mặc định
+                              e.currentTarget.style.display = 'none';
+                              e.currentTarget.parentElement?.classList.add('show-fallback');
+                            }}
+                          />
+                        ) : (
+                          <UserIcon className="h-5 w-5 text-slate-500" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="font-medium">{user.full_name}</div>
+                        <div className="text-sm text-muted-foreground">{user.phone_number}</div>
                       </div>
                     </div>
-                  </div>
-                </td>
-              </tr>
-            ) : users.length === 0 ? (
-              <tr>
-                <td colSpan={6} className="px-6 py-4 text-center text-gray-500 dark:text-gray-400">
-                  Không tìm thấy người dùng nào
-                </td>
-              </tr>
-            ) : (
-              users.map((user) => (
-                <UserRow
-                  key={user.id}
-                  user={user}
-                  onView={() => {/* TODO: Implement view user details */}}
-                  onApproveKyc={handleApproveKyc}
-                  onRejectKyc={handleRejectKyc}
-                  onLock={handleLock}
-                  onUnlock={handleUnlock}
-                />
+                  </TableCell>
+                  <TableCell>{user.email}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">
+                      {user.role === 'admin' ? 'Quản trị viên' : 
+                       user.role === 'moderator' ? 'Kiểm duyệt viên' : 'Người dùng'}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{renderUserStatus(user.is_locked)}</TableCell>
+                  <TableCell>{renderKycStatus(user.kyc_status)}</TableCell>
+                  <TableCell>{new Date(user.created_at).toLocaleDateString('vi-VN')}</TableCell>
+                  <TableCell>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button size="icon" variant="ghost">
+                          <MoreHorizontal className="h-4 w-4" />
+                          <span className="sr-only">Mở menu</span>
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem onClick={() => handleViewUser(user._id)}>
+                          <Eye className="mr-2 h-4 w-4" />
+                          <span>Xem chi tiết</span>
+                        </DropdownMenuItem>
+                        
+                        {user.kyc_status === 'pending' && (
+                          <>
+                            <DropdownMenuItem onClick={() => handleKycAction(user._id, true)}>
+                              <CheckCircle className="mr-2 h-4 w-4" />
+                              <span>Duyệt KYC</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleKycAction(user._id, false)}>
+                              <XCircle className="mr-2 h-4 w-4" />
+                              <span>Từ chối KYC</span>
+                            </DropdownMenuItem>
+                          </>
+                        )}
+                        
+                        {!user.is_locked ? (
+                          <DropdownMenuItem onClick={() => handleLockAction(user._id, true)}>
+                            <Lock className="mr-2 h-4 w-4" />
+                            <span>Khóa tài khoản</span>
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem onClick={() => handleLockAction(user._id, false)}>
+                            <Unlock className="mr-2 h-4 w-4" />
+                            <span>Mở khóa tài khoản</span>
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </TableCell>
+                </TableRow>
               ))
             )}
-          </tbody>
-        </table>
+            
+            {users.length === 0 && !loading && (
+              <TableRow>
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  Không tìm thấy người dùng nào
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
-
-      {hasMore && !loading && (
-        <div className="mt-4 text-center">
-          <Button
-            variant="outline"
-            onClick={handleLoadMore}
-            className="w-full md:w-auto"
-          >
-            Tải thêm
+      
+      {pagination.hasMore && (
+        <div className="mt-6 flex justify-center">
+          <Button variant="outline" onClick={loadMore} disabled={loading}>
+            {loading ? 'Đang tải...' : 'Tải thêm'}
           </Button>
         </div>
       )}
-    </div>
+    </Card>
   );
-}; 
+};
+
+export default AdminUserList; 

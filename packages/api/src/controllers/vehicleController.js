@@ -1,4 +1,5 @@
 const Vehicle = require('../models/Vehicle');
+const notificationUtil = require('../utils/notificationUtil');
 
 // @desc    Create a new vehicle
 // @route   POST /api/vehicles
@@ -204,15 +205,32 @@ exports.updateVehicle = async (req, res) => {
       return res.status(404).json({ message: 'Vehicle not found' });
     }
 
-    if (vehicle.user.toString() !== req.user._id.toString()) {
+    // Kiểm tra xem người dùng có phải là chủ xe hoặc là admin không
+    const isAdmin = req.user.role === 'admin' || req.user.role === 'moderator';
+    const isOwner = vehicle.user.toString() === req.user._id.toString();
+
+    if (!isAdmin && !isOwner) {
       return res.status(403).json({ message: 'Not authorized to update this vehicle' });
     }
+
+    const oldStatus = vehicle.status;
+    const newStatus = req.body.status;
 
     const updatedVehicle = await Vehicle.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
-    );
+    ).populate('user', '_id');
+
+    // Gửi thông báo nếu trạng thái xe thay đổi và người dùng là admin/moderator
+    if (isAdmin && oldStatus !== newStatus && updatedVehicle.user) {
+      if (newStatus === 'approved') {
+        await notificationUtil.sendVehicleApprovedNotification(updatedVehicle, updatedVehicle.user._id);
+      } else if (newStatus === 'rejected') {
+        const reason = req.body.rejection_reason || '';
+        await notificationUtil.sendVehicleRejectedNotification(updatedVehicle, updatedVehicle.user._id, reason);
+      }
+    }
 
     res.json(updatedVehicle);
   } catch (error) {
@@ -280,6 +298,86 @@ exports.getUserVehicles = async (req, res) => {
       .populate('user', 'full_name email phone_number avatar_url rating');
     res.json(vehicles);
   } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get vehicles for admin dashboard
+// @route   GET /api/vehicles/admin
+// @access  Private (Admin only)
+exports.getVehiclesForAdmin = async (req, res) => {
+  try {
+    const { 
+      search, 
+      type, 
+      status,
+      seller,
+      page = 1,
+      limit = 10
+    } = req.query;
+    
+    // Xác thực người dùng là admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ 
+        message: 'Không có quyền truy cập trang này' 
+      });
+    }
+    
+    const filters = {};
+    
+    // Lọc theo loại xe
+    if (type && type !== 'all') {
+      filters.type = type;
+    }
+    
+    // Lọc theo trạng thái
+    if (status && status !== 'all') {
+      filters.status = status;
+    }
+    
+    // Lọc theo người bán (user ID)
+    if (seller && seller !== 'all') {
+      filters.user = seller;
+    }
+
+    // Tìm kiếm theo tiêu đề, mã xe, biển số xe
+    if (search) {
+      filters.$or = [
+        { title: { $regex: search, $options: 'i' } },
+        { car_id: { $regex: search, $options: 'i' } },
+        { license_plate: { $regex: search, $options: 'i' } },
+        { make: { $regex: search, $options: 'i' } },
+        { model: { $regex: search, $options: 'i' } }
+      ];
+    }
+
+    // Thiết lập phân trang
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+    const skip = (pageNum - 1) * limitNum;
+
+    // Lấy tổng số lượng xe phù hợp với bộ lọc
+    const total = await Vehicle.countDocuments(filters);
+    
+    // Lấy danh sách xe với phân trang
+    const vehicles = await Vehicle.find(filters)
+      .populate('user', 'full_name email phone_number avatar_url')
+      .sort({ created_at: -1 })
+      .skip(skip)
+      .limit(limitNum);
+
+    // Trả về kết quả
+    res.json({
+      vehicles,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(total / limitNum)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching admin vehicles:', error);
     res.status(500).json({ message: error.message });
   }
 }; 

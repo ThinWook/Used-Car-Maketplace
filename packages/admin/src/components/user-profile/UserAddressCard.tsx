@@ -5,9 +5,35 @@ import { Modal } from "../ui/modal";
 import Button from "../ui/button/Button";
 import Input from "../form/input/InputField";
 import Label from "../form/Label";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function UserAddressCard() {
   const { isOpen, openModal, closeModal } = useModal();
+  const { user } = useAuth();
+  
+  // Phân tách địa chỉ thành quốc gia và thành phố
+  const getAddressParts = () => {
+    if (!user?.address) return { country: 'Việt Nam', city: '' };
+    
+    // Phân tách địa chỉ đơn giản theo dấu phẩy
+    const addressParts = user.address.split(',');
+    if (addressParts.length <= 1) {
+      return { 
+        country: 'Việt Nam', 
+        city: addressParts[0]?.trim() || ''
+      };
+    }
+    
+    // Giả định phần cuối là quốc gia
+    const country = addressParts.pop()?.trim() || 'Việt Nam';
+    // Phần còn lại là thành phố
+    const city = addressParts.join(', ').trim();
+    
+    return { country, city };
+  };
+  
+  const { country, city } = getAddressParts();
+  
   const handleSave = () => {
     // Handle save logic here
     console.log("Saving changes...");
@@ -28,7 +54,7 @@ export default function UserAddressCard() {
                   Country
                 </p>
                 <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  United States
+                  {country || "Việt Nam"}
                 </p>
               </div>
 
@@ -37,25 +63,7 @@ export default function UserAddressCard() {
                   City/State
                 </p>
                 <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  Phoenix, Arizona, United States.
-                </p>
-              </div>
-
-              <div>
-                <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-                  Postal Code
-                </p>
-                <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  ERT 2489
-                </p>
-              </div>
-
-              <div>
-                <p className="mb-2 text-xs leading-normal text-gray-500 dark:text-gray-400">
-                  TAX ID
-                </p>
-                <p className="text-sm font-medium text-gray-800 dark:text-white/90">
-                  AS4568384
+                  {city || user?.address || "N/A"}
                 </p>
               </div>
             </div>
@@ -99,22 +107,12 @@ export default function UserAddressCard() {
               <div className="grid grid-cols-1 gap-x-6 gap-y-5 lg:grid-cols-2">
                 <div>
                   <Label>Country</Label>
-                  <Input type="text" defaultValue="United States" />
+                  <Input type="text" defaultValue={country} />
                 </div>
 
                 <div>
                   <Label>City/State</Label>
-                  <Input type="text" defaultValue="Arizona, United States." />
-                </div>
-
-                <div>
-                  <Label>Postal Code</Label>
-                  <Input type="text" defaultValue="ERT 2489" />
-                </div>
-
-                <div>
-                  <Label>TAX ID</Label>
-                  <Input type="text" defaultValue="AS4568384" />
+                  <Input type="text" defaultValue={city || user?.address || ""} />
                 </div>
               </div>
             </div>

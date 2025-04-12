@@ -40,9 +40,13 @@ const userSchema = new mongoose.Schema({
   },
   role: {
     type: String,
-    enum: ['user', 'admin'],
+    enum: ['user', 'admin', 'moderator'],
     required: true,
     default: 'user'
+  },
+  is_locked: {
+    type: Boolean,
+    default: false
   },
   rating: {
     type: Number,
@@ -91,11 +95,6 @@ const userSchema = new mongoose.Schema({
     default: 0
   },
   
-  // Xe yêu thích
-  favorites: [{
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Vehicle'
-  }],
   created_at: {
     type: Date,
     default: Date.now

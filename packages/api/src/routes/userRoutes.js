@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/userController');
-const { protect } = require('../middleware/auth');
+const { protect, admin } = require('../middleware/auth');
 const multer = require('multer');
 const { CloudinaryStorage } = require('multer-storage-cloudinary');
 const cloudinary = require('cloudinary').v2;
@@ -70,7 +70,7 @@ router.post('/login', userController.loginUser);
 // Protected routes
 router.get('/profile', protect, userController.getUserProfile);
 router.put('/profile', protect, userController.updateUserProfile);
-router.delete('/profile', protect, userController.deleteUser);
+router.delete('/', protect, userController.deleteUser);
 
 // Avatar upload route
 router.post('/avatar', protect, logUploadMiddleware, uploadAvatar.single('avatar'), userController.updateUserAvatar);
@@ -85,10 +85,14 @@ router.post('/upload-kyc-documents', protect, logUploadMiddleware, uploadKycDocu
 ]), userController.uploadKycDocuments);
 
 // KYC information update route
-router.put('/update-kyc', protect, userController.updateKyc);
+router.post('/update-kyc', protect, userController.updateKyc);
 
-// Favorites routes
-router.post('/favorites/:vehicleId', protect, userController.addToFavorites);
-router.delete('/favorites/:vehicleId', protect, userController.removeFromFavorites);
+// Admin routes
+router.get('/', protect, admin, userController.getUsers);
+router.post('/toggle-lock', protect, admin, userController.toggleUserLock);
+router.post('/update-kyc-status', protect, admin, userController.updateKycStatus);
+router.post('/admin-login', userController.loginAdmin);
+router.post('/refresh-token', userController.refreshAdminToken);
+router.get('/:id', protect, admin, userController.getUserById);
 
 module.exports = router; 

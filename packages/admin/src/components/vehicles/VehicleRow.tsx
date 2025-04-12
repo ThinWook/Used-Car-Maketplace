@@ -5,7 +5,7 @@ import { Vehicle } from "./AdminVehicleList";
 interface VehicleRowProps {
   vehicle: Vehicle;
   onAction: (vehicleId: string, action: string) => void;
-  onViewDetails: (vehicle: Vehicle) => void;
+  onViewDetails: (vehicleId: string) => void;
 }
 
 const StatusBadge = ({ status }: { status: Vehicle["status"] }) => {
@@ -137,7 +137,7 @@ export default function VehicleRow({
       <td className="px-6 py-4 relative">
         <div className="flex items-center space-x-2">
           <button
-            onClick={() => onViewDetails(vehicle)}
+            onClick={() => onViewDetails(vehicle.id)}
             type="button"
             className="px-2 py-1 text-xs font-medium text-blue-700 bg-blue-100 rounded-md hover:bg-blue-200 dark:bg-blue-900/30 dark:text-blue-500 dark:hover:bg-blue-800/50"
           >
@@ -210,4 +210,3 @@ export default function VehicleRow({
     </tr>
   );
 } 
- 

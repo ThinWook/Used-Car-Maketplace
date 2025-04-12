@@ -8,6 +8,7 @@ export default function GridShape() {
         <Image
           width={540}
           height={254}
+          style={{ height: "auto" }}
           src="/images/shape/grid-01.svg"
           alt="grid"
         />
@@ -16,6 +17,7 @@ export default function GridShape() {
         <Image
           width={540}
           height={254}
+          style={{ height: "auto" }}
           src="/images/shape/grid-01.svg"
           alt="grid"
         />

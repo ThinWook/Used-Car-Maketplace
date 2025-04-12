@@ -8,14 +8,17 @@ export function middleware(request: NextRequest) {
   // Bỏ qua các trang không cần xác thực
   if (
     request.nextUrl.pathname.startsWith('/signin') ||
-    request.nextUrl.pathname.startsWith('/signup') ||
     request.nextUrl.pathname.startsWith('/reset-password') ||
-    request.nextUrl.pathname.startsWith('/profile') ||
     request.nextUrl.pathname.includes('/_next') ||
-    request.nextUrl.pathname.includes('/images/') ||
+    request.nextUrl.pathname.includes('/images') || 
     request.nextUrl.pathname.includes('/fonts/')
   ) {
     return NextResponse.next()
+  }
+
+  // Chuyển hướng trang đăng ký về trang đăng nhập
+  if (request.nextUrl.pathname.startsWith('/signup')) {
+    return NextResponse.redirect(signinUrl)
   }
 
   // Kiểm tra token
@@ -34,6 +37,15 @@ export function middleware(request: NextRequest) {
   try {
     // Giải mã thông tin người dùng từ cookie
     const userData = JSON.parse(decodeURIComponent(userDataCookie))
+    
+    // Kiểm tra token có hết hạn không
+    const tokenExpiry = userData.exp // Giả sử userData chứa thông tin về thời gian hết hạn
+    const currentTime = Math.floor(Date.now() / 1000) // Thời gian hiện tại tính bằng giây
+    
+    if (tokenExpiry && currentTime > tokenExpiry) {
+      console.log('Token đã hết hạn, chuyển hướng về trang đăng nhập')
+      return NextResponse.redirect(signinUrl)
+    }
     
     // Kiểm tra role admin
     if (userData.role !== 'admin') {
